@@ -215,7 +215,7 @@ class OptimizedSummary:
             # if word only appears in ext vocab, use extended id in full_stoi
 
             curr_in = self.tgt_field.init_token
-            print('Successfully initialized')
+            # print('Successfully initialized')
 
         log_probs, attn = self.translate_step(curr_in)
 
@@ -227,7 +227,7 @@ class OptimizedSummary:
             'len(tgt_dict) (={}) != len(log_probs) (={})'.format( \
                 len(self.full_itos), log_probs_shape)
 
-        return log_probs, self.full_itos
+        return log_probs.numpy(), self.full_itos
 
     def translate_step(self, curr_in):
         with torch.no_grad():
@@ -249,9 +249,8 @@ class OptimizedSummary:
                 self.data.src_vocabs, #ok
                 memory_lengths=self.src_lengths, #ok
                 src_map=self.batch.src_map, #ok
-                step=self.step, # need to see
-                batch_offset=None, # not sure, but working
-                verbose=True
+                step=self.step, # ok
+                batch_offset=None # not sure, but working
             )
 
             self.step += 1

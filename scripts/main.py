@@ -20,22 +20,23 @@ s0_sent = Unfold(underlying_model=s0_word,beam_width=2)
 l1_sent = Constant(support=sentences,unfolded_model=s0_sent,change_direction=True)
 
 # Prefers translations which communicate the source sentence over any distractors. E.g. source_sent=sentences[0] and distractors = [sentences[1]]
-# Because I restrict s0_sent to produce a distribution over only two output sentences (using beam_width=2), 
+# Because I restrict s0_sent to produce a distribution over only two output sentences (using beam_width=2),
 # s1_sent_gp is tractable here.
 s1_sent_gp = Pragmatic(
 	rightward_model=s0_sent,
-	leftward_model=None, 
+	leftward_model=None,
 	unfolded_leftward_model=l1_sent,
 	width=2,rat=rationality,
 	EXTEND=False)
 
+"""
 # a pretrained neural translator. Fairseq again.
 l0_word = BaseCase(path='models/fconv_wmt_de_en',source='de',target='en',bpe_code_path='/code')
 
 # prefers choosing next word of translation which communicates source sentence over any distractors.
 s1_word = Pragmatic(
 	rightward_model=s0_word,
-	leftward_model=None, 
+	leftward_model=None,
 	unfolded_leftward_model=l1_sent,
 	width=1000,rat=rationality,
 	EXTEND=False)
@@ -47,7 +48,7 @@ s1_sent_ip = Unfold(underlying_model=s1_word,beam_width=2)
 # again, only tractable when target sentence space is restricted (here to two sentences)
 s1_sent_c_gp = Pragmatic(
 	rightward_model=s0_sent,
-	leftward_model=None, 
+	leftward_model=None,
 	unfolded_leftward_model=l1_sent,
 	width=2,rat=rationality,
 	EXTEND=True)
@@ -55,25 +56,25 @@ s1_sent_c_gp = Pragmatic(
 # avoids restriction of s1_sent_c_gp by generating a single word at a time. See paper for details.
 s1_word_c = Pragmatic(
 	rightward_model=s0_word,
-	leftward_model=l0_word, 
+	leftward_model=l0_word,
 	unfolded_leftward_model=None,
 	width=2,rat=5.0,
 	EXTEND=True)
 
 # produces a sentence level pragmatic speaker that doesn't need explicit distractors from s1_word _c
 s1_sent_c_ip = Unfold(underlying_model=s1_word_c,beam_width=2)
+"""
 
 
-models = {"s0_word":s0_word,"s0_sent":s0_sent,"s1_word":s1_word,"s1_sent_gp":s1_sent_gp,"s1_sent_ip":s1_sent_ip,"s1_sent_c_gp":s1_sent_c_gp,"s1_sent_c_ip":s1_sent_c_ip}
+# models = {"s0_word":s0_word,"s0_sent":s0_sent,"s1_word":s1_word,"s1_sent_gp":s1_sent_gp,"s1_sent_ip":s1_sent_ip,"s1_sent_c_gp":s1_sent_c_gp,"s1_sent_c_ip":s1_sent_c_ip}
+small_list = {"s0_word":s0_word,"s0_sent":s0_sent,"s1_sent_gp":s1_sent_gp}
 
-for model_type in models:
+for model_type in small_list:
 
 	print("model: "+model_type)
-	model = models[model_type]
+	model = small_list[model_type]
 
 	probs, support = model.forward(sequence=[],source_sentence=sentences[0],debug=False)
 	print(display(probs=probs,support=support))
 
 	model.empty_cache()
-
-

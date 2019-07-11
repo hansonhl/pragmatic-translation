@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 from collections import defaultdict
 IMG_DATA_PATH="charpragcap/resources/visual_genome_data/"
 REP_DATA_PATH="charpragcap/resources/resnet_reps/"
@@ -36,6 +37,3 @@ def list_to_index_iso(l):
 	out["rightward"]=rightward
 	out["leftward"]=leftward
 	return out
-
-
-
