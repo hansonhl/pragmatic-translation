@@ -42,7 +42,7 @@ from utils.sample import to_var,load_image,load_image_from_path
 class BaseCase:
 
 	def __init__(self,path,source,target,bpe_code_path=None):
-		
+
 		# from interactive import Args
 		from collections import namedtuple
 		import numpy as np
@@ -180,7 +180,7 @@ class BaseCase:
 
 	def memoize_forward(f):
 		def helper(self,sequence,source_sentence,debug=False):
-	
+
 
 			# print("source sent",source_sentence)
 			# world_prior_list = np.ndarray.tolist(np.ndarray.flatten(state.world_priors))
@@ -188,7 +188,7 @@ class BaseCase:
 			if hashable_args not in self.cache:
 				# print("MEM\n\n")
 				self.cache[hashable_args] = f(self,sequence=sequence,source_sentence=source_sentence,debug=debug)
-			# else: 
+			# else:
 			# 	print("LOOKING UP")
 			# 	print("cache keys",list(self.cache))
 			return self.cache[hashable_args]
@@ -269,7 +269,7 @@ class BaseCase:
 		# print("translations",translations)
 		# print(translations[:5],"translations")
 		probs, support = translations, [self.tgt_dict[x] for x in range(translations.shape[0])]
-		
+
 		# probs = list(probs)
 		# support = list(support)
 		# for seg in source_sentence.split():
@@ -287,7 +287,7 @@ class BaseCase:
 		probs = np.asarray(probs)
 		# print(target,"target word")
 		try: out = probs[support.index(target)]
-		except: 
+		except:
 			support = np.asarray(support)
 			print("target word failed:",target)
 			print("sequence:",sequence)
@@ -305,14 +305,14 @@ class Factor_To_Character:
 		self.seg_type = "char"
 		self.cache = {}
 		self.bpe_code_path=word_model.bpe_code_path
-	
+
 	def empty_cache(self):
 		self.cache={}
 		self.word_model.empty_cache()
 
 	def memoize_forward(f):
 		def helper(self,sequence,source_sentence,debug=False):
-	
+
 			# world_prior_list = np.ndarray.tolist(np.ndarray.flatten(state.world_priors))
 			hashable_args = (tuple(sequence),tuple(source_sentence))
 			if hashable_args not in self.cache:
@@ -329,7 +329,7 @@ class Factor_To_Character:
 		sequence = "".join(sequence).split()
 		word_sequence = sequence[:-1]
 		if ends_with_space: word_sequence = sequence
-		
+
 		char_remainder = sequence[-1:]
 		if char_remainder != []: char_remainder = char_remainder[0]
 		else: char_remainder = ""
@@ -344,7 +344,7 @@ class Factor_To_Character:
 		# print(word_support[np.asarray(np.argmax(word_probs))])
 		# print("ends_with_space",ends_with_space,"ends_with_space")
 			# ,len(char_remainder),["abc"][:len(char_remainder)],["abc"][:len(char_remainder)]==char_remainder)
-		
+
 		# print(word_probs)
 		# print(word_sequence)
 
@@ -388,7 +388,7 @@ class Factor_To_Character:
 
 					if sym_set[i]==word[index]:
 						char_dist[i]+=np.exp(word_dict[word])
-					
+
 
 					elif (word[index] not in set(sym_set)) and sym_set[i]=='&':
 						char_dist[i]+=np.exp(word_dict[word])
@@ -418,18 +418,18 @@ class Factor_To_Character:
 		probs,support = self.forward(sequence=sequence,source_sentence=source_sentence)
 		# print(target,"target word")
 		try: out = probs[support.index(target)]
-		except: 
+		except:
 			print("target word failed:",target)
 			raise Exception
 		return out
 
 
-# useful for retrieving standard RSA by have an L0 defined as: const blah 
+# useful for retrieving standard RSA by have an L0 defined as: const blah
 class Constant:
 
 	# change_direction specifies whether the unfolded_model goes in the same direction as the output model or the other
 	def __init__(self,support,unfolded_model,prior_ps=None,change_direction=True):
-		
+
 		self.seg_type="sentence"
 		# self.support = [byte_pair_encoding(sentence=s,code_path=unfolded_model.bpe_code_path) for s in support]
 
@@ -450,7 +450,7 @@ class Constant:
 
 	def memoize_forward(f):
 		def helper(self,sequence,source_sentence,debug=False):
-	
+
 			# world_prior_list = np.ndarray.tolist(np.ndarray.flatten(state.world_priors))
 			hashable_args = (tuple(sequence),tuple(source_sentence))
 			if hashable_args not in self.cache:
@@ -458,7 +458,7 @@ class Constant:
 				self.cache[hashable_args] = f(self,sequence=sequence,source_sentence=source_sentence,debug=debug)
 			return self.cache[hashable_args]
 		return helper
-		
+
 	@memoize_forward
 	def forward(self,source_sentence,sequence,debug=False):
 
@@ -483,7 +483,7 @@ class Constant:
 					# print("target",sent)
 				# print("source_sentence",source_sentence)
 				score = self.unfolded_model.likelihood(source_sentence=source_sentence,sequence=sequence,target=sent)
-			else: 
+			else:
 				if debug:
 					pass
 					print("CONSTANT")
@@ -512,7 +512,7 @@ class Constant:
 
 		probs,support = self.forward(sequence=sequence,source_sentence=source_sentence,debug=debug)
 		try: out = probs[support.index(target)]
-		except: 
+		except:
 			print("target word failed:",target)
 			print(support[:10])
 			raise Exception
@@ -534,17 +534,17 @@ class Compose:
 		self.cache={}
 		try:self.bpe_code_path=rightward_model.bpe_code_path
 		except: self.bpe_code_path=unfolded_rightward_model.underlying_model.bpe_code_path
-	
+
 	def memoize_forward(f):
 		def helper(self,sequence,source_sentence,debug=False,):
-	
+
 			hashable_args = (tuple(sequence),tuple(source_sentence),debug)
 			if hashable_args not in self.cache:
 				# print("MEM\n\n")
 				self.cache[hashable_args] = f(self,sequence=sequence,source_sentence=source_sentence,debug=debug,)
 			return self.cache[hashable_args]
 		return helper
-		
+
 	@memoize_forward
 	def forward(self,source_sentence,sequence,debug=False,):
 
@@ -564,7 +564,7 @@ class Compose:
 		# print("target_lang_input",target_lang_input)
 
 		final_probs,final_support = self.leftward_model.forward(source_sentence=target_lang_input,sequence=sequence,debug=debug)
-		
+
 		if debug:
 			pass
 			# print("target support",final_support)
@@ -597,7 +597,7 @@ class Compose:
 
 		probs,support = self.forward(sequence=sequence,source_sentence=source_sentence)
 		try: out = probs[support.index(target)]
-		except: 
+		except:
 			print("target word failed:",target)
 			raise Exception
 		return out
@@ -605,7 +605,7 @@ class Compose:
 class Unfold:
 
 	def __init__(self,underlying_model,beam_width=1,diverse=False,stop_on=None):
-		
+
 		self.seg_type="sentence"
 		self.underlying_model = underlying_model
 		self.max_sentence_length = max_sentence_length[self.underlying_model.seg_type]
@@ -621,7 +621,7 @@ class Unfold:
 
 	def memoize_forward(f):
 		def helper(self,sequence,source_sentence,debug=False):
-	
+
 			hashable_args = (tuple(sequence),tuple(source_sentence),debug)
 			if hashable_args not in self.cache:
 				# print("MEM\n\n")
@@ -629,7 +629,7 @@ class Unfold:
 				self.cache[hashable_args] = f(self,sequence=sequence,source_sentence=source_sentence,debug=debug)
 			return self.cache[hashable_args]
 		return helper
-		
+
 	@memoize_forward
 	def forward(self, source_sentence, sequence,debug=False):
 		# print("DEBUG?",debug,"STOP ON",stop_on)
@@ -654,7 +654,6 @@ class Unfold:
 		final_sentences=[]
 		for step in tqdm(range(1,self.max_sentence_length)):
 
-			
 			new_sent_prob = []
 			for sent,old_prob in sent_prob:
 
@@ -728,7 +727,7 @@ class Unfold:
 						# if debug: print("\n\nENDING TOKEN\n\n",sent[-1])
 						final_sentence = copy.deepcopy(sent)
 						final_sentences.append((final_sentence,prob))
-					else: 
+					else:
 						new_tuple = copy.deepcopy((sent,prob))
 						new_sent_prob.append(new_tuple)
 
@@ -752,14 +751,14 @@ class Unfold:
 
 		probs=[]
 		support=[]
-		
+
 
 		if final_sentences == []: final_sentences = sent_prob
 		for sent,prob in final_sentences:
 			probs.append(prob)
 			if self.underlying_model.seg_type=='char':
 				support.append("".join(sent[:-1]))
-				# if support[-1][-1] not in 
+				# if support[-1][-1] not in
 			else: support.append(" ".join(sent[:-1]))
 
 
@@ -790,7 +789,5 @@ class Unfold:
 			likelihood[i] = self.underlying_model.likelihood(sequence=new_sequence, source_sentence=source_sentence,target=seg,debug=debug)
 			new_sequence+=[new_target[i]]
 
-		
+
 		return np.sum([p for (l,p) in likelihood.items()])
-
-

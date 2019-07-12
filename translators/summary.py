@@ -4,8 +4,7 @@ from collections import defaultdict as DefDict
 
 DEFAULT_CONFIG_FILES = ['summary_inference2.yml']
 
-class Summary:
-
+class NaiveSummary:
     def __init__(self, onmt_path):
         # managing package import for OpenNMT
         sys.path.insert(0, os.path.abspath(onmt_path)) # ../myOpenNMT
@@ -29,6 +28,7 @@ class Summary:
         print('Finished configuration.\n')
 
         self.translator.beam_size = 1
+        self.seg_type = 'word'
 
         # Get vocab
         # tgt_field object is a torchtext.data.field.Field object，
@@ -42,6 +42,7 @@ class Summary:
         self.curr_seq = ''
 
     def forward(self, sequence, source_sentence, debug=False):
+        #### DEPRECATED: need to treat sequence as a list of subwords
         import onmt.inputters as inputters
 
         src = [source_sentence]
@@ -169,34 +170,67 @@ class OptimizedSummary:
         self.eos_token = self.tgt_field.eos_token
         self.base_itos = self.tgt_field.vocab.itos
         self.base_stoi = self.tgt_field.vocab.stoi
-        self.curr_seq = ''
+        self.curr_seq = None
 
+        # the following are required by the interface:
+        self.bpe_code_path = None
+        self.seg_type = 'word'
+        self.cache = {}
+
+    def memoize_forward(f):
+        def helper(self,sequence,source_sentence,debug=False):
+            # world_prior_list = np.ndarray.tolist(np.ndarray.flatten(state.world_priors))
+            hashable_args = (tuple(sequence),tuple(source_sentence))
+            if hashable_args not in self.cache:
+                # print("MEM\n\n")
+                self.cache[hashable_args] = f(self, sequence, source_sentence, debug)
+            return self.cache[hashable_args]
+        return helper
+
+    @memoize_forward
     def forward(self, sequence, source_sentence, debug=False):
+        # TODO: memoize sequences that are already read
+
+        # for each growing sequence, the following are invariant:
+        # self.data, self.data_iter, self.batch; encoder output: self.src,
+        # self.enc_states, self.memory_bank, self.src_lengths;
+        # decoder state (possibly try saving entire translator object
+
+        # treat sequence as substring
         import onmt.inputters as inputters
         T = self.translator
 
-        if sequence != '' and sequence.startswith(self.curr_seq):
-            curr_in = sequence[len(self.curr_seq):].strip()
+        if isinstance(sequence, str):
+            sequence = sequence.split()
+
+        if sequence != [] and self.curr_seq is not None and \
+            _is_continuation(self.curr_seq, sequence):
+            curr_in = sequence[-1]
             self.curr_seq = sequence
         else:
-            # NOTE: assume a new sequence must start with ''
+            print('Starting new sequence')
             self.step = 0
-            self.curr_seq = ''
+            self.curr_seq = sequence
+
+            self._start_from_new_seq = (self.curr_seq != [])
 
             # setup for new sequence:
-            self.raw_src = [source_sentence]
+            raw_src = [source_sentence]
+
+            # setting up data inputters
             self.data = inputters.Dataset(
                 T.fields,
                 readers=([T.src_reader]),
-                data=[("src", self.raw_src)],
+                data=[("src", raw_src)],
                 dirs=[None],
                 sort_key=inputters.str2sortkey[T.data_type],
                 filter_pred=T._filter_pred
             )
+
             self.data_iter = inputters.OrderedIterator(
                 dataset=self.data,
                 device=T._dev,
-                batch_size=self.batch_size,
+                batch_size=self.batch_size, # 1 by default
                 train=False,
                 sort=False,
                 sort_within_batch=True,
@@ -215,21 +249,10 @@ class OptimizedSummary:
             # if word only appears in ext vocab, use extended id in full_stoi
 
             curr_in = self.tgt_field.init_token
-            # print('Successfully initialized')
+            if self._start_from_new_seq:
+                curr_in = [curr_in] + self.curr_seq
+            ## End of configuring a new input
 
-        log_probs, attn = self.translate_step(curr_in)
-
-        # The following assumes only one sentence in batch:
-        log_probs = log_probs.squeeze()
-        log_probs_shape = log_probs.shape[0]
-
-        assert len(self.full_itos) == log_probs_shape, \
-            'len(tgt_dict) (={}) != len(log_probs) (={})'.format( \
-                len(self.full_itos), log_probs_shape)
-
-        return log_probs.numpy(), self.full_itos
-
-    def translate_step(self, curr_in):
         with torch.no_grad():
             if self.step == 0:
                 for batch in self.data_iter:
@@ -239,22 +262,67 @@ class OptimizedSummary:
                     self.translator.model.decoder.init_state(
                         self.src, self.memory_bank, self.enc_states)
 
-            decoder_input= torch.tensor(self.full_stoi[curr_in], \
-                dtype=torch.long).view(1,1,1)
+            if not self._start_from_new_seq:
+                decoder_input = torch.tensor(self.full_stoi[curr_in], \
+                    dtype=torch.long).view(1,1,1)
+                log_probs, attn = self.translator._decode_and_generate(
+                    decoder_input, #ok
+                    self.memory_bank, #ok
+                    self.batch,      #ok
+                    self.data.src_vocabs, #ok
+                    memory_lengths=self.src_lengths, #ok
+                    src_map=self.batch.src_map, #ok
+                    step=self.step, # need to see
+                    batch_offset=None, # not sure, but working
+                    verbose=True
+                )
+                self.step += 1
+            else:
+                seq = [self.full_stoi[x] for x in curr_in]
+                for wd in seq:
+                    decoder_input = torch.tensor(wd).view(1,1,1)
+                    log_probs, attn = self.translator._decode_and_generate(
+                        decoder_input, #ok
+                        self.memory_bank, #ok
+                        self.batch,      #ok
+                        self.data.src_vocabs, #ok
+                        memory_lengths=self.src_lengths, #ok
+                        src_map=self.batch.src_map, #ok
+                        step=self.step, # need to see
+                        batch_offset=None, # not sure, but working
+                        verbose=True
+                    )
+                    self.step += 1
+                self._start_from_new_seq = False
 
-            log_probs, attn = self.translator._decode_and_generate(
-                decoder_input, #ok
-                self.memory_bank, #ok
-                self.batch,      #ok
-                self.data.src_vocabs, #ok
-                memory_lengths=self.src_lengths, #ok
-                src_map=self.batch.src_map, #ok
-                step=self.step, # ok
-                batch_offset=None # not sure, but working
-            )
+        # The following assumes only one sentence in batch:
+        log_probs = log_probs.squeeze()
+        if len(log_probs.shape) == 2:
+            log_probs = log_probs[-1]
+        log_probs_shape = log_probs.shape[0]
 
-            self.step += 1
-            return log_probs, attn
+        assert len(self.full_itos) == log_probs_shape, \
+            'len(tgt_dict) (={}) != len(log_probs) (={})'.format( \
+                len(self.full_itos), log_probs_shape)
+
+        return log_probs, self.full_itos
+
+    def likelihood(self,sequence,source_sentence,target,debug=False):
+        probs,support = self.forward(sequence=sequence,source_sentence=source_sentence)
+        # print(target,"target word")
+        try: out = probs[support.index(target)]
+        except:
+            print("target word failed:",target)
+            raise Exception
+        return out
+
+def _is_continuation(l1, l2):
+    len1, len2 = len(l1), len(l2)
+    if len2 - len1 != 1:
+        return False
+    minl = min(len(l1), len(l2))
+    return all(i == j for i, j in zip(l1[:minl], l2[:minl]))
+
 
 def greedy_summary(model, sent):
     seq, pred = '', ''
